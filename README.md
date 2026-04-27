@@ -11,7 +11,7 @@ A single-file, browser-based airspace visualiser for VATSIM sector JSON files. N
 
 ## Getting Started
 
-1. Download `vatscope.html`
+1. Download `index.html`
 2. Open it in any modern browser (Chrome, Firefox, Edge)
 3. Click **↑ LOAD FILE** and select one or more VATSIM sector `.json` files
 4. Sectors will render on the map and the FL slider will auto-set to the lowest defined floor
@@ -185,7 +185,7 @@ All points in the JSON format use zero-padded DMS strings:
 - **Longitude:** `DDDMMSS` — 7 digits, e.g. `0090307` = 9°03'07"E
 - **Southern/Western values** are prefixed with a minus sign, e.g. `-365727`
 
-VATSCOPE parses both 6- and 7-digit strings automatically.
+It parses both 6- and 7-digit strings automatically.
 
 ---
 
