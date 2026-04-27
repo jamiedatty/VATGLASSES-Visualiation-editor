@@ -31,7 +31,6 @@ VATSCOPE expects VATSIM-format JSON with an `airspace` array. A minimal example:
       "type": "TWR",
       "callsign": "DTKA_TWR",
       "frequency": "118.100",
-      "colours": [{ "hex": "#f0b429" }]
     }
   },
   "airspace": [
