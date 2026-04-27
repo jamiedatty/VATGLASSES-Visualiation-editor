@@ -25,14 +25,6 @@ Multiple files can be loaded simultaneously. Duplicate filenames replace the pre
 VATSCOPE expects VATSIM-format JSON with an `airspace` array. A minimal example:
 
 ```json
-{
-  "positions": {
-    "KAT": {
-      "type": "TWR",
-      "callsign": "DTKA_TWR",
-      "frequency": "118.100",
-    }
-  },
   "airspace": [
     {
       "id": "Tabarka",
