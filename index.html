@@ -1,0 +1,845 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>VATSCOPE — VATSIM Airspace Viewer</title>
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  html, body { height: 100%; overflow: hidden; background: #1a1a2e; }
+  #map { position: absolute; inset: 0; z-index: 0; }
+
+  .leaflet-bottom, .leaflet-control-attribution { display: none !important; }
+  .leaflet-control-zoom { margin-top: 48px !important; }
+  .leaflet-control-zoom a { background: #16213e !important; color: #a0c4e8 !important; border-color: #2a3f5f !important; font-size: 14px !important; }
+  .leaflet-control-zoom a:hover { background: #0f3460 !important; }
+  .leaflet-tooltip { background: #16213e !important; border: 1px solid #2a3f5f !important; color: #a0c4e8 !important; font-family: 'Courier New', monospace !important; font-size: 11px !important; border-radius: 2px !important; padding: 3px 8px !important; box-shadow: none !important; }
+  .leaflet-tooltip::before { display: none !important; }
+  .leaflet-popup-content-wrapper { background: #0d1b2a !important; border: 1px solid #2a4a6a !important; border-radius: 4px !important; box-shadow: 0 6px 32px rgba(0,0,0,0.85) !important; padding: 0 !important; min-width: 280px !important; }
+  .leaflet-popup-content { margin: 0 !important; font-family: 'Courier New', monospace !important; width: 300px !important; }
+  .leaflet-popup-tip-container { display: none !important; }
+  .leaflet-popup-close-button { color: #5a8aaa !important; font-size: 16px !important; top: 6px !important; right: 8px !important; padding: 0 !important; z-index: 10 !important; }
+  .leaflet-popup-close-button:hover { color: #a0c4e8 !important; }
+
+  .popup-group-badge { display: inline-block; font-size: 9px; padding: 2px 6px; border-radius: 2px; letter-spacing: 1px; font-weight: bold; }
+  .badge-ctr { background: #1a3050; color: #5dade2; border: 1px solid #2a5080; }
+  .badge-app { background: #1a3020; color: #58d68d; border: 1px solid #2a5030; }
+  .badge-twr { background: #302010; color: #f0b429; border: 1px solid #504020; }
+  .badge-gnd { background: #201020; color: #c39bd3; border: 1px solid #402040; }
+  .badge-del { background: #201818; color: #ec7063; border: 1px solid #402020; }
+  .badge-fss { background: #102020; color: #45b39d; border: 1px solid #204040; }
+  .owner-chip { font-size: 9px; padding: 2px 7px; border-radius: 10px; letter-spacing: 0.5px; }
+  .owner-chip.primary { background: #0d2540; color: #5dade2; border: 1px solid #2a5080; }
+  .owner-chip.secondary { background: #0a1a28; color: #3a6080; border: 1px solid #1a3050; }
+  .popup-compact { padding: 10px 12px 8px; font-family: 'Courier New', monospace; min-width: 220px; }
+  .pc-name { font-size: 13px; font-weight: bold; color: #5dade2; margin-bottom: 6px; display: flex; align-items: center; flex-wrap: wrap; gap: 4px; }
+  .pc-row { display: flex; align-items: center; gap: 5px; font-size: 10px; margin-bottom: 6px; }
+  .pc-lbl { color: #4a7090; } .pc-val { color: #8ab8d8; font-weight: bold; } .pc-val.amber { color: #f0b429; } .pc-sep { color: #2a4060; }
+  .pc-owners { display: flex; flex-wrap: wrap; gap: 4px; margin-bottom: 8px; }
+  .pc-actions { border-top: 1px solid #0f1e2e; padding-top: 7px; display: flex; gap: 6px; flex-wrap: wrap; }
+  .pc-btn { background: #0d2540; border: 1px solid #2a5080; color: #5dade2; font-family: 'Courier New', monospace; font-size: 9px; padding: 4px 10px; cursor: pointer; border-radius: 2px; transition: background 0.15s; letter-spacing: 0.5px; }
+  .pc-btn:hover { background: #122e56; }
+  .pc-btn.color-btn { border-color: #2a6050; color: #58d68d; background: #0d2520; }
+  .pc-btn.color-btn:hover { background: #123020; }
+
+  /* Vertex editor bar */
+  #veditor-bar { position: absolute; bottom: 30px; left: 50%; transform: translateX(-50%); z-index: 2100; background: rgba(8,15,28,0.97); backdrop-filter: blur(8px); border: 1px solid #2a5080; border-radius: 4px; padding: 7px 14px; display: none; align-items: center; gap: 10px; font-family: 'Courier New', monospace; font-size: 10px; color: #5dade2; box-shadow: 0 4px 24px rgba(0,0,0,0.8); white-space: nowrap; }
+  #veditor-bar.active { display: flex; }
+  .vebar-title { color: #3a6080; font-size: 9px; letter-spacing: 1px; }
+  .vebar-hint { color: #2a4a60; font-size: 8px; }
+  .vebar-count { color: #5dade2; font-size: 10px; font-weight: bold; }
+  .vebar-btn { background: #0d2540; border: 1px solid #2a5080; color: #5dade2; font-family: 'Courier New', monospace; font-size: 9px; padding: 4px 10px; cursor: pointer; border-radius: 2px; transition: background 0.15s; }
+  .vebar-btn:hover { background: #122e56; }
+  .vebar-btn.copy { border-color: #2a8050; color: #58d68d; background: #0d2520; }
+  .vebar-btn.copy:hover { background: #123020; }
+  .vebar-btn.close { border-color: #602020; color: #c05050; background: #200a0a; }
+  .vebar-btn.close:hover { background: #300f0f; }
+  #vebar-copied { color: #58d68d; font-size: 9px; opacity: 0; transition: opacity 0.3s; }
+  #vebar-copied.show { opacity: 1; }
+
+  /* Draw mode toolbar */
+  #draw-bar { position: absolute; top: 46px; left: 50%; transform: translateX(-50%); z-index: 2200; background: rgba(6,14,26,0.97); backdrop-filter: blur(8px); border: 1px solid #f0b429; border-radius: 4px; padding: 7px 16px; display: none; align-items: center; gap: 12px; font-family: 'Courier New', monospace; font-size: 10px; color: #f0b429; box-shadow: 0 4px 28px rgba(0,0,0,0.9); white-space: nowrap; }
+  #draw-bar.active { display: flex; }
+  .dbar-title { font-size: 9px; letter-spacing: 2px; color: #a07820; }
+  #dbar-count { font-weight: bold; min-width: 40px; }
+  .dbar-hint { font-size: 8px; color: #604a10; }
+  .dbar-btn { background: #1a1000; border: 1px solid #504020; color: #f0b429; font-family: 'Courier New', monospace; font-size: 9px; padding: 4px 10px; cursor: pointer; border-radius: 2px; transition: background 0.15s; }
+  .dbar-btn:hover { background: #2a1a00; }
+  .dbar-btn.undo { border-color: #4a3010; color: #c09040; }
+  .dbar-btn.clear-all { border-color: #602020; color: #c05050; background: #1a0505; }
+  .dbar-btn.clear-all:hover { background: #2a0808; }
+  .dbar-btn.done { border-color: #2a6040; color: #58d68d; background: #0a1f15; }
+  .dbar-btn.done:hover { background: #0f2a1c; }
+  .dbar-btn.copyjson { border-color: #2a5080; color: #5dade2; background: #0a1525; }
+  .dbar-btn.copyjson:hover { background: #0f1e35; }
+  #dbar-copied { color: #58d68d; font-size: 9px; opacity: 0; transition: opacity 0.3s; }
+  #dbar-copied.show { opacity: 1; }
+
+  /* Topbar */
+  #topbar { position: absolute; top: 0; left: 0; right: 0; z-index: 1000; display: flex; align-items: center; gap: 10px; padding: 6px 14px; background: rgba(10,22,42,0.92); backdrop-filter: blur(8px); border-bottom: 1px solid #1a3050; font-family: 'Courier New', monospace; flex-wrap: wrap; }
+  .logo { font-size: 13px; font-weight: bold; color: #5dade2; letter-spacing: 3px; white-space: nowrap; }
+  .tbtn { background: #0d1f3c; border: 1px solid #2a4060; color: #7aabe8; padding: 4px 11px; font-size: 10px; cursor: pointer; font-family: 'Courier New', monospace; border-radius: 3px; white-space: nowrap; transition: background 0.15s; }
+  .tbtn:hover { background: #122a52; }
+  .tbtn.lit { background: #0d3060; border-color: #5dade2; color: #a0d0f0; }
+  .tbtn.green { border-color: #2a6040; color: #58d68d; background: #0a1f15; }
+  .tbtn.green:hover { background: #0f2a1c; }
+  #fname { font-size: 9px; color: #3a6080; flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  #lvl-ctrl { display: flex; align-items: center; gap: 7px; flex-shrink: 0; }
+  #lvl-ctrl label { font-size: 9px; color: #3a6080; }
+  #lvl-slider { width: 120px; accent-color: #5dade2; cursor: pointer; }
+  #lvl-val { font-size: 12px; color: #5dade2; min-width: 36px; font-weight: bold; }
+
+  /* Positions panel */
+  #panel { position: absolute; top: 37px; right: 0; bottom: 26px; z-index: 999; width: 300px; background: rgba(8,15,28,0.97); backdrop-filter: blur(8px); border-left: 1px solid #1a3050; display: flex; flex-direction: column; font-family: 'Courier New', monospace; transform: translateX(100%); transition: transform 0.22s ease; }
+  #panel.open { transform: translateX(0); }
+  #sb-hdr { padding: 6px 10px; font-size: 8px; color: #3a6080; border-bottom: 1px solid #0f1e2e; letter-spacing: 1px; display: flex; align-items: center; justify-content: space-between; flex-shrink: 0; }
+  #act-count { color: #5dade2; font-size: 9px; }
+  #pos-list { flex: 1; overflow-y: auto; }
+  #pos-list::-webkit-scrollbar { width: 3px; }
+  #pos-list::-webkit-scrollbar-thumb { background: #1a3050; }
+  .file-block { border-bottom: 1px solid #0f1e2e; }
+  .file-hdr { display: flex; align-items: center; gap: 6px; padding: 6px 9px; cursor: pointer; background: #0a1422; transition: background 0.1s; user-select: none; }
+  .file-hdr:hover { background: #0f1f35; }
+  .file-chevron { font-size: 8px; color: #2a5070; flex-shrink: 0; transition: transform 0.15s ease; display: inline-block; width: 10px; text-align: center; }
+  .file-block.collapsed .file-chevron { transform: rotate(-90deg); }
+  .file-title { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 9px; color: #4a80a8; letter-spacing: 0.5px; }
+  .file-badge { font-size: 8px; color: #2a5070; background: #080f1a; border: 1px solid #1a3050; border-radius: 2px; padding: 1px 5px; flex-shrink: 0; }
+  .file-active-badge { font-size: 8px; color: #5dade2; background: #0a1f3c; border: 1px solid #2a5080; border-radius: 2px; padding: 1px 5px; flex-shrink: 0; display: none; }
+  .file-block.has-active .file-active-badge { display: block; }
+  .file-remove { font-size: 9px; color: #2a4060; cursor: pointer; padding: 0 2px; flex-shrink: 0; transition: color 0.1s; }
+  .file-remove:hover { color: #c0504a; }
+  .file-block.collapsed .file-body { display: none; }
+  .grp { padding: 3px 10px; font-size: 8px; color: #3a6080; background: #060c18; letter-spacing: 1px; border-bottom: 1px solid #0f1e2e; }
+  .prow { display: flex; align-items: center; gap: 7px; padding: 5px 9px; cursor: pointer; font-size: 9px; border-bottom: 1px solid #080f18; transition: background 0.1s; }
+  .prow:hover { background: #0d1f35; }
+  .pdot { width: 9px; height: 9px; border-radius: 50%; flex-shrink: 0; cursor: pointer; }
+  .pname { flex: 1; overflow: hidden; }
+  .pid { color: #7aabe8; font-size: 10px; font-weight: bold; }
+  .pcall { color: #3a6080; font-size: 8px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .ptog { font-size: 9px; color: #1a3050; flex-shrink: 0; }
+  .prow.on .ptog { color: #5dade2; }
+  .no-files-hint { padding: 16px 10px; color: #2a5060; font-size: 9px; line-height: 1.7; }
+  .prow-color-wrap { position: relative; display: flex; align-items: center; }
+  .prow-color-input { opacity: 0; position: absolute; inset: 0; width: 100%; height: 100%; cursor: pointer; border: none; padding: 0; }
+
+  /* Status bar */
+  #sbar { position: absolute; bottom: 0; left: 0; right: 0; z-index: 1000; background: rgba(6,12,22,0.94); backdrop-filter: blur(4px); border-top: 1px solid #0f1e2e; padding: 3px 14px; font-size: 9px; color: #3a6080; display: flex; gap: 18px; font-family: 'Courier New', monospace; }
+  #sbar span:last-child { margin-left: auto; }
+  #empty-msg { position: absolute; top: 50%; left: 50%; transform: translate(-50%,-50%); background: rgba(10,20,38,0.95); border: 1px solid #1a3050; padding: 20px 32px; text-align: center; color: #3a6080; font-size: 12px; border-radius: 4px; pointer-events: none; z-index: 500; font-family: 'Courier New', monospace; line-height: 1.8; }
+  #empty-msg .icon { font-size: 28px; color: #1a3050; display: block; margin-bottom: 8px; }
+
+  /* New Sector Side Panel */
+  #sector-panel { position: absolute; top: 37px; left: 0; bottom: 26px; z-index: 1500; width: 330px; background: rgba(6,12,22,0.98); backdrop-filter: blur(10px); border-right: 2px solid #504020; display: flex; flex-direction: column; font-family: 'Courier New', monospace; transform: translateX(-100%); transition: transform 0.22s ease; }
+  #sector-panel.open { transform: translateX(0); }
+  .sp-hdr { padding: 9px 12px; border-bottom: 1px solid #2a1a00; display: flex; align-items: center; justify-content: space-between; background: rgba(20,10,0,0.5); flex-shrink: 0; }
+  .sp-title { font-size: 11px; color: #f0b429; letter-spacing: 2px; font-weight: bold; }
+  .sp-close { background: none; border: none; color: #504020; font-size: 16px; cursor: pointer; padding: 0; line-height: 1; }
+  .sp-close:hover { color: #c05050; }
+  .sp-body { flex: 1; overflow-y: auto; padding: 10px 12px; display: flex; flex-direction: column; gap: 8px; }
+  .sp-body::-webkit-scrollbar { width: 3px; }
+  .sp-body::-webkit-scrollbar-thumb { background: #2a1a00; }
+  .sp-footer { padding: 8px 12px; border-top: 1px solid #1a1000; display: flex; gap: 6px; flex-shrink: 0; }
+
+  .sfield { display: flex; flex-direction: column; gap: 3px; }
+  .sfield label { font-size: 8px; color: #604a10; letter-spacing: 1px; }
+  .sfield input, .sfield select { background: #080600; border: 1px solid #2a1a00; color: #d0a040; font-family: 'Courier New', monospace; font-size: 10px; padding: 4px 7px; border-radius: 2px; outline: none; transition: border-color 0.15s; }
+  .sfield input:focus, .sfield select:focus { border-color: #604a10; }
+  .sfield input[type="color"] { padding: 2px 3px; height: 26px; cursor: pointer; width: 50px; }
+  .srow { display: flex; gap: 8px; }
+  .srow .sfield { flex: 1; }
+
+  .fl-section-hdr { font-size: 8px; color: #604a10; letter-spacing: 1px; padding: 4px 0 2px; border-bottom: 1px solid #1a1000; display: flex; align-items: center; justify-content: space-between; }
+  .fl-range-item { background: #060400; border: 1px solid #1a1000; border-radius: 3px; padding: 8px; margin-bottom: 6px; }
+  .fl-range-hdr { display: flex; align-items: center; justify-content: space-between; margin-bottom: 6px; }
+  .fl-range-label { font-size: 8px; color: #604a10; letter-spacing: 1px; }
+  .fl-range-pts { font-size: 9px; color: #f0b429; font-weight: bold; }
+  .fl-range-remove { background: none; border: none; color: #3a2020; font-size: 9px; cursor: pointer; }
+  .fl-range-remove:hover { color: #c05050; }
+  .fl-draw-btn { background: #1a1000; border: 1px solid #504020; color: #f0b429; font-family: 'Courier New', monospace; font-size: 8px; padding: 3px 8px; cursor: pointer; border-radius: 2px; transition: background 0.15s; }
+  .fl-draw-btn:hover { background: #2a1a00; }
+  .fl-draw-btn.drawing-active { background: #3a2800; border-color: #f0b429; color: #ffe080; }
+  .fl-add-btn { background: #0a0800; border: 1px solid #2a1a00; color: #806020; font-family: 'Courier New', monospace; font-size: 8px; padding: 4px 10px; cursor: pointer; border-radius: 2px; transition: background 0.15s; width: 100%; letter-spacing: 1px; }
+  .fl-add-btn:hover { background: #1a1000; color: #f0b429; }
+
+  /* JSON output area */
+  .sp-json-section { border-top: 1px solid #0f0a00; padding-top: 8px; }
+  .sp-json-hdr { font-size: 8px; color: #3a6080; letter-spacing: 1px; margin-bottom: 4px; display: flex; align-items: center; justify-content: space-between; }
+  .sp-json-copy-btn { background: #0a1525; border: 1px solid #1a3050; color: #5dade2; font-family: 'Courier New', monospace; font-size: 8px; padding: 2px 8px; cursor: pointer; border-radius: 2px; transition: background 0.15s; }
+  .sp-json-copy-btn:hover { background: #0f1e35; }
+  #sp-json-copied { color: #58d68d; font-size: 8px; opacity: 0; transition: opacity 0.3s; margin-left: 4px; }
+  #sp-json-copied.show { opacity: 1; }
+  #sp-json-out { width: 100%; min-height: 130px; max-height: 220px; background: #030508; border: 1px solid #0a1020; color: #5a8aaa; font-family: 'Courier New', monospace; font-size: 8px; padding: 6px; border-radius: 2px; resize: none; outline: none; }
+
+  .sfbtn { background: #0d1f3c; border: 1px solid #2a4060; color: #7aabe8; font-family: 'Courier New', monospace; font-size: 9px; padding: 5px 12px; cursor: pointer; border-radius: 2px; transition: background 0.15s; flex: 1; }
+  .sfbtn:hover { background: #122a52; }
+  .sfbtn.green { border-color: #2a6040; color: #58d68d; background: #0a1f15; }
+  .sfbtn.green:hover { background: #0f2a1c; }
+  .sfbtn.cancel { border-color: #3a2020; color: #805050; background: #120a0a; }
+  .sfbtn.cancel:hover { background: #1c0f0f; }
+
+  body.drawing #map { cursor: crosshair !important; }
+  body.drawing .leaflet-container { cursor: crosshair !important; }
+</style>
+</head>
+<body>
+
+<div id="map"></div>
+
+<!-- Vertex editor bar -->
+<div id="veditor-bar">
+  <span class="vebar-title">VERTEX EDIT</span>
+  <span class="vebar-count" id="vebar-count">0 pts</span>
+  <span class="vebar-hint">drag to move · dbl-click midpoint to insert</span>
+  <button class="vebar-btn copy" onclick="copyVertices()">⎘ COPY JSON</button>
+  <span id="vebar-copied">✓ Copied!</span>
+  <button class="vebar-btn close" onclick="stopVertexEdit()">✕ DONE</button>
+</div>
+
+<!-- Draw mode toolbar -->
+<div id="draw-bar">
+  <span class="dbar-title">● DRAWING</span>
+  <span id="dbar-count">0 pts</span>
+  <span class="dbar-hint">click to place · right-click to undo</span>
+  <button class="dbar-btn undo" onclick="drawUndo()">↩ UNDO</button>
+  <button class="dbar-btn clear-all" onclick="drawClear()">✕ CLEAR</button>
+  <button class="dbar-btn copyjson" onclick="drawCopyJson()">⎘ COPY JSON</button>
+  <span id="dbar-copied">✓</span>
+  <button class="dbar-btn done" onclick="finishDrawing()">✔ DONE</button>
+</div>
+
+<!-- Topbar -->
+<div id="topbar">
+  <div class="logo">◈ VATSCOPE</div>
+  <button class="tbtn" onclick="document.getElementById('fi').click()">↑ LOAD FILE</button>
+  <input type="file" id="fi" accept=".json" style="display:none" multiple>
+  <span id="fname">no file loaded</span>
+  <div id="lvl-ctrl">
+    <label>FL</label>
+    <input type="range" id="lvl-slider" min="0" max="660" step="5" value="50">
+    <span id="lvl-val">050</span>
+  </div>
+  <button class="tbtn green" onclick="openSectorPanel()">+ SECTOR</button>
+  <button class="tbtn" id="all-btn" onclick="toggleAllPositions()">ALL ON</button>
+  <button class="tbtn" id="toggle-btn" onclick="togglePanel()">POSITIONS ▶</button>
+</div>
+
+<!-- New Sector Panel -->
+<div id="sector-panel">
+  <div class="sp-hdr">
+    <span class="sp-title">◈ NEW SECTOR</span>
+    <button class="sp-close" onclick="closeSectorPanel()">✕</button>
+  </div>
+  <div class="sp-body">
+
+    <div class="srow">
+      <div class="sfield">
+        <label>ID *</label>
+        <input type="text" id="ns-id" placeholder="e.g. Tabarka" oninput="refreshSectorJson()">
+      </div>
+      <div class="sfield">
+        <label>GROUP</label>
+        <select id="ns-group" onchange="refreshSectorJson()">
+          <option value="CTR">CTR</option>
+          <option value="APP">APP</option>
+          <option value="DEP">DEP</option>
+          <option value="TWR" selected>TWR</option>
+          <option value="GND">GND</option>
+          <option value="DEL">DEL</option>
+          <option value="FSS">FSS</option>
+        </select>
+      </div>
+    </div>
+
+    <div class="sfield">
+      <label>COMMENT</label>
+      <input type="text" id="ns-comment" placeholder="e.g. DTKA_TWR" oninput="refreshSectorJson()">
+    </div>
+
+    <div class="sfield">
+      <label>OWNERS (comma-separated)</label>
+      <input type="text" id="ns-owners" placeholder="KAT, KAA, TCNL, TC" oninput="refreshSectorJson()">
+    </div>
+
+    <div class="srow">
+      <div class="sfield" style="flex:0 0 auto;">
+        <label>COLOUR</label>
+        <input type="color" id="ns-color" value="#f0b429" onchange="onColorChange()">
+      </div>
+    </div>
+
+    <div class="fl-section-hdr">
+      <span>FL RANGES</span>
+    </div>
+    <div id="fl-ranges-list"></div>
+    <button class="fl-add-btn" onclick="addFlRange()">+ ADD FL RANGE</button>
+
+    <!-- Always-visible JSON output -->
+    <div class="sp-json-section">
+      <div class="sp-json-hdr">
+        <span>JSON OUTPUT — updates live</span>
+        <div style="display:flex;align-items:center;">
+          <span id="sp-json-copied">✓ Copied!</span>
+          <button class="sp-json-copy-btn" onclick="copySpJson()">⎘ COPY ALL</button>
+        </div>
+      </div>
+      <textarea id="sp-json-out" readonly spellcheck="false"></textarea>
+    </div>
+
+  </div>
+  <div class="sp-footer">
+    <button class="sfbtn cancel" onclick="closeSectorPanel()">CANCEL</button>
+    <button class="sfbtn green" onclick="saveSector()">✔ ADD TO MAP</button>
+  </div>
+</div>
+
+<!-- Positions panel -->
+<div id="panel">
+  <div id="sb-hdr">
+    <span>ATC POSITIONS</span>
+    <span id="act-count">0 active</span>
+  </div>
+  <div id="pos-list">
+    <div class="no-files-hint">Load a file to see positions</div>
+  </div>
+</div>
+
+<div id="sbar">
+  <span id="s-vis">VISIBLE: —</span>
+  <span id="s-pos">POSITIONS: —</span>
+  <span id="s-fl">FL: 050</span>
+  <span id="s-coord"></span>
+</div>
+
+<div id="empty-msg">
+  <span class="icon">◈</span>
+  Load a VATSIM sector JSON file<br>
+  <span style="font-size:9px;color:#1a3050">Use the LOAD FILE button above</span>
+</div>
+
+<script>
+  let map, layerGroup, nodeLayer;
+  let files = [], fileIdCounter = 0, FL = 50, panelOpen = false;
+  const sectorColorOverrides = {};
+  const INACTIVE_STYLE = { fill:'#4a4a4a', stroke:'#6a6a6a', fillOpacity:0.10, weight:0.8, opacity:0.45 };
+  const ACTIVE_FILL_OPACITY = 0.40;
+
+  // ── DMS helpers ─────────────────────────────────────────────────────────
+  function latToDMS(lat) {
+    const neg=lat<0, a=Math.abs(lat), d=Math.floor(a), mf=(a-d)*60, m=Math.floor(mf);
+    let s=Math.round((mf-m)*60); if(s>=60)s=59;
+    return (neg?'-':'')+String(d).padStart(2,'0')+String(m).padStart(2,'0')+String(s).padStart(2,'0');
+  }
+  function lngToDMS(lng) {
+    const neg=lng<0, a=Math.abs(lng), d=Math.floor(a), mf=(a-d)*60, m=Math.floor(mf);
+    let s=Math.round((mf-m)*60); if(s>=60)s=59;
+    return (neg?'-':'')+String(d).padStart(3,'0')+String(m).padStart(2,'0')+String(s).padStart(2,'0');
+  }
+  function parseDMS(s) {
+    s=String(s).trim(); const neg=s.startsWith('-'); if(neg)s=s.slice(1);
+    while(s.length<6)s='0'+s;
+    let deg,min,sec;
+    if(s.length>=7){deg=parseInt(s.slice(0,3));min=parseInt(s.slice(3,5));sec=parseInt(s.slice(5,7));}
+    else{deg=parseInt(s.slice(0,2));min=parseInt(s.slice(2,4));sec=parseInt(s.slice(4,6));}
+    return neg?-(deg+min/60+sec/3600):(deg+min/60+sec/3600);
+  }
+
+  // ══════════════════════════════════════════════════════════════════════════
+  // VERTEX EDITOR (existing sectors)
+  // ══════════════════════════════════════════════════════════════════════════
+  let vertexEdit = null;
+
+  function stopVertexEdit() {
+    if(!vertexEdit)return;
+    vertexEdit.markers.forEach(m=>nodeLayer.removeLayer(m));
+    vertexEdit.midMarkers.forEach(m=>nodeLayer.removeLayer(m));
+    vertexEdit=null;
+    document.getElementById('veditor-bar').classList.remove('active');
+    map.doubleClickZoom.enable();
+  }
+
+  function updatePolygonShape() {
+    if(!vertexEdit?.polygon)return;
+    vertexEdit.polygon.setLatLngs(vertexEdit.points.map(p=>L.latLng(p[0],p[1])));
+    if(vertexEdit.latlngsRef){vertexEdit.latlngsRef.length=0;vertexEdit.points.forEach(p=>vertexEdit.latlngsRef.push([p[0],p[1]]));}
+  }
+
+  function updateVertexEditDisplay() {
+    if(!vertexEdit)return;
+    document.getElementById('vebar-count').textContent=`${vertexEdit.points.length} pts`;
+    vertexEdit.midMarkers.forEach(m=>nodeLayer.removeLayer(m));
+    vertexEdit.midMarkers=[];
+    for(let i=0;i<vertexEdit.points.length;i++){
+      const a=vertexEdit.points[i],b=vertexEdit.points[(i+1)%vertexEdit.points.length];
+      const midLat=(a[0]+b[0])/2,midLng=(a[1]+b[1])/2,insertIdx=i+1;
+      const mid=L.circleMarker([midLat,midLng],{radius:4,fillColor:'#1a3050',fillOpacity:0.85,color:'#5dade2',weight:1.2,opacity:0.5,interactive:true,pane:'nodePane'});
+      mid.on('dblclick',ev=>{L.DomEvent.stopPropagation(ev);vertexEdit.points.splice(insertIdx,0,[midLat,midLng]);rebuildVertexMarkers();updatePolygonShape();});
+      mid.addTo(nodeLayer);vertexEdit.midMarkers.push(mid);
+    }
+  }
+
+  function rebuildVertexMarkers() {
+    if(!vertexEdit)return;
+    vertexEdit.markers.forEach(m=>nodeLayer.removeLayer(m));
+    vertexEdit.markers=[];
+    vertexEdit.points.forEach((pt,idx)=>{
+      const marker=L.circleMarker([pt[0],pt[1]],{radius:7,fillColor:'#5dade2',fillOpacity:0.9,color:'#ffffff',weight:1.5,opacity:1.0,interactive:true,pane:'nodePane'});
+      marker.on('mousedown',ev=>{
+        L.DomEvent.stopPropagation(ev);L.DomEvent.preventDefault(ev);map.dragging.disable();
+        const onMove=moveEv=>{const ll=map.mouseEventToLatLng(moveEv);vertexEdit.points[idx]=[ll.lat,ll.lng];marker.setLatLng(ll);updatePolygonShape();updateVertexEditDisplay();};
+        const onUp=()=>{map.dragging.enable();document.removeEventListener('mousemove',onMove);document.removeEventListener('mouseup',onUp);};
+        document.addEventListener('mousemove',onMove);document.addEventListener('mouseup',onUp);
+      });
+      marker.addTo(nodeLayer);vertexEdit.markers.push(marker);
+    });
+    updateVertexEditDisplay();
+  }
+
+  window.startVertexEdit=function(uid){
+    map.closePopup();
+    const data=window._pendingEdits_data[uid]; if(!data)return;
+    stopVertexEdit();
+    vertexEdit={points:data.latlngs.map(p=>[p[0],p[1]]),markers:[],midMarkers:[],polygon:data.polygon,latlngsRef:data.latlngs,sectorName:data.sectorName};
+    map.doubleClickZoom.disable();
+    document.getElementById('veditor-bar').classList.add('active');
+    rebuildVertexMarkers();
+  };
+
+  function copyVertices(){
+    if(!vertexEdit)return;
+    navigator.clipboard.writeText(vertexEdit.points.map(p=>`            ["${latToDMS(p[0])}", "${lngToDMS(p[1])}"]`).join(',\n')).then(()=>{const el=document.getElementById('vebar-copied');el.classList.add('show');setTimeout(()=>el.classList.remove('show'),2000);});
+  }
+  window.copyVertices=copyVertices; window.stopVertexEdit=stopVertexEdit;
+
+  // ══════════════════════════════════════════════════════════════════════════
+  // NEW SECTOR PANEL + MAP DRAWING
+  // ══════════════════════════════════════════════════════════════════════════
+  let flRangeCounter=0;
+  let flRanges=[];          // [{id,min,max,points:[],markers:[],poly:null}]
+  let activeFlRangeId=null; // currently-drawing range id
+
+  function openSectorPanel() {
+    flRanges.forEach(r=>clearFlRangeMapObjects(r));
+    flRanges=[]; flRangeCounter=0; activeFlRangeId=null;
+    document.getElementById('ns-id').value='';
+    document.getElementById('ns-comment').value='';
+    document.getElementById('ns-owners').value='';
+    document.getElementById('ns-color').value='#f0b429';
+    document.getElementById('ns-group').value='TWR';
+    document.getElementById('fl-ranges-list').innerHTML='';
+    addFlRange();
+    document.getElementById('sector-panel').classList.add('open');
+    refreshSectorJson();
+  }
+  window.openSectorPanel=openSectorPanel;
+
+  function closeSectorPanel(){
+    stopDrawing();
+    flRanges.forEach(r=>clearFlRangeMapObjects(r));
+    flRanges=[]; activeFlRangeId=null;
+    document.getElementById('sector-panel').classList.remove('open');
+  }
+  window.closeSectorPanel=closeSectorPanel;
+
+  function clearFlRangeMapObjects(r){
+    if(!r)return;
+    (r.markers||[]).forEach(m=>nodeLayer.removeLayer(m)); r.markers=[];
+    if(r.poly){layerGroup.removeLayer(r.poly);r.poly=null;}
+  }
+
+  function addFlRange(minV,maxV){
+    flRangeCounter++;
+    const id='flr-'+flRangeCounter;
+    flRanges.push({id,min:minV||0,max:maxV||999,points:[],markers:[],poly:null});
+    renderFlRangeList();
+    refreshSectorJson();
+  }
+  window.addFlRange=addFlRange;
+
+  function removeFlRange(id){
+    const r=flRanges.find(r=>r.id===id);
+    if(r)clearFlRangeMapObjects(r);
+    if(activeFlRangeId===id)stopDrawing();
+    flRanges=flRanges.filter(r=>r.id!==id);
+    renderFlRangeList(); refreshSectorJson();
+  }
+  window.removeFlRange=removeFlRange;
+
+  function updateFlMin(id,v){const r=flRanges.find(r=>r.id===id);if(r){r.min=parseInt(v)||0;refreshSectorJson();}}
+  function updateFlMax(id,v){const r=flRanges.find(r=>r.id===id);if(r){r.max=parseInt(v)||999;refreshSectorJson();}}
+  window.updateFlMin=updateFlMin; window.updateFlMax=updateFlMax;
+
+  function renderFlRangeList(){
+    const list=document.getElementById('fl-ranges-list');
+    list.innerHTML='';
+    flRanges.forEach((r,i)=>{
+      const isActive=activeFlRangeId===r.id;
+      const div=document.createElement('div');
+      div.className='fl-range-item'; div.id='ui-'+r.id;
+      div.innerHTML=`
+        <div class="fl-range-hdr">
+          <span class="fl-range-label">RANGE #${i+1}</span>
+          <span class="fl-range-pts" id="pts-${r.id}">${r.points.length} pts</span>
+          <button class="fl-range-remove" onclick="removeFlRange('${r.id}')">✕</button>
+        </div>
+        <div class="srow" style="margin-bottom:6px;">
+          <div class="sfield"><label>MIN FL</label><input type="number" value="${r.min}" min="0" max="999" onchange="updateFlMin('${r.id}',this.value)"></div>
+          <div class="sfield"><label>MAX FL</label><input type="number" value="${r.max}" min="0" max="999" onchange="updateFlMax('${r.id}',this.value)"></div>
+        </div>
+        <div style="display:flex;gap:5px;flex-wrap:wrap;">
+          <button class="fl-draw-btn${isActive?' drawing-active':''}" onclick="toggleDrawForRange('${r.id}')">${isActive?'■ STOP':'✦ DRAW POINTS'}</button>
+          ${r.points.length>0?`<button class="fl-draw-btn" onclick="undoLastPoint('${r.id}')">↩ UNDO</button><button class="fl-draw-btn" style="color:#c05050;" onclick="clearRangePoints('${r.id}')">✕ CLEAR</button>`:''}
+        </div>`;
+      list.appendChild(div);
+    });
+  }
+
+  function toggleDrawForRange(id){
+    if(activeFlRangeId===id)stopDrawing();
+    else startDrawingForRange(id);
+  }
+  window.toggleDrawForRange=toggleDrawForRange;
+
+  function startDrawingForRange(id){
+    stopDrawing();
+    activeFlRangeId=id;
+    document.body.classList.add('drawing');
+    document.getElementById('draw-bar').classList.add('active');
+    map.doubleClickZoom.disable();
+    updateDrawBar();
+    renderFlRangeList();
+  }
+
+  function stopDrawing(){
+    if(!activeFlRangeId)return;
+    activeFlRangeId=null;
+    document.body.classList.remove('drawing');
+    document.getElementById('draw-bar').classList.remove('active');
+    map.doubleClickZoom.enable();
+    renderFlRangeList();
+  }
+
+  function updateDrawBar(){
+    const r=flRanges.find(r=>r.id===activeFlRangeId);
+    document.getElementById('dbar-count').textContent=r?`${r.points.length} pts`:'0 pts';
+  }
+
+  function drawUndo(){
+    const r=flRanges.find(r=>r.id===activeFlRangeId);
+    if(r&&r.points.length>0)undoLastPoint(activeFlRangeId);
+  }
+  window.drawUndo=drawUndo;
+
+  function undoLastPoint(id){
+    const r=flRanges.find(r=>r.id===id); if(!r||r.points.length===0)return;
+    r.points.pop();
+    const m=r.markers.pop(); if(m)nodeLayer.removeLayer(m);
+    updatePreviewPoly(r); updateDrawBar(); renderFlRangeList(); refreshSectorJson();
+  }
+  window.undoLastPoint=undoLastPoint;
+
+  function drawClear(){
+    const r=flRanges.find(r=>r.id===activeFlRangeId);
+    if(r)clearRangePoints(r.id);
+  }
+  window.drawClear=drawClear;
+
+  function clearRangePoints(id){
+    const r=flRanges.find(r=>r.id===id); if(!r)return;
+    r.markers.forEach(m=>nodeLayer.removeLayer(m)); r.markers=[]; r.points=[];
+    if(r.poly){layerGroup.removeLayer(r.poly);r.poly=null;}
+    updateDrawBar(); renderFlRangeList(); refreshSectorJson();
+  }
+  window.clearRangePoints=clearRangePoints;
+
+  function finishDrawing(){ stopDrawing(); }
+  window.finishDrawing=finishDrawing;
+
+  function updatePreviewPoly(r){
+    if(r.poly){layerGroup.removeLayer(r.poly);r.poly=null;}
+    if(r.points.length>=3){
+      const color=document.getElementById('ns-color').value||'#f0b429';
+      r.poly=L.polygon(r.points.map(p=>L.latLng(p[0],p[1])),{fillColor:color,color:color,fillOpacity:0.20,weight:1.5,opacity:0.8,dashArray:'6 4',interactive:false});
+      r.poly.addTo(layerGroup);
+    }
+  }
+
+  function onColorChange(){
+    flRanges.forEach(r=>{if(r.points.length>=3)updatePreviewPoly(r);});
+    refreshSectorJson();
+  }
+  window.onColorChange=onColorChange;
+
+  // Map click → place point
+  function onMapClick(e){
+    if(!activeFlRangeId)return;
+    const r=flRanges.find(r=>r.id===activeFlRangeId); if(!r)return;
+    L.DomEvent.stopPropagation(e);
+    const ll=e.latlng;
+    r.points.push([ll.lat,ll.lng]);
+    const color=document.getElementById('ns-color').value||'#f0b429';
+    const m=L.circleMarker([ll.lat,ll.lng],{radius:6,fillColor:color,fillOpacity:0.9,color:'#ffffff',weight:1.5,opacity:1,interactive:false,pane:'nodePane'});
+    m.addTo(nodeLayer); r.markers.push(m);
+    updatePreviewPoly(r); updateDrawBar(); renderFlRangeList(); refreshSectorJson();
+  }
+
+  // Right-click → undo while drawing
+  function onMapContextMenu(e){
+    if(!activeFlRangeId)return;
+    L.DomEvent.preventDefault(e); L.DomEvent.stopPropagation(e);
+    drawUndo();
+  }
+
+  // Build formatted JSON text
+  function buildSectorJsonText(){
+    const id=document.getElementById('ns-id').value.trim()||'NewSector';
+    const comment=document.getElementById('ns-comment').value.trim();
+    const group=document.getElementById('ns-group').value;
+    const ownersRaw=document.getElementById('ns-owners').value.trim();
+    const owners=ownersRaw?ownersRaw.split(',').map(s=>s.trim()).filter(Boolean):[];
+    let out='{\n';
+    out+=`  "id": "${id}",\n`;
+    if(comment) out+=`  "comment": "${comment}",\n`;
+    out+=`  "group": "${group}",\n`;
+    out+=`  "owner": [${owners.map(o=>`"${o}"`).join(', ')}],\n`;
+    out+=`  "sectors": [\n`;
+    flRanges.forEach((r,si)=>{
+      out+=`    {\n`;
+      out+=`      "min": ${r.min},\n`;
+      out+=`      "max": ${r.max},\n`;
+      out+=`      "points": [\n`;
+      r.points.forEach((p,pi)=>{out+=`        ["${latToDMS(p[0])}", "${lngToDMS(p[1])}"]${pi<r.points.length-1?',':''}\n`;});
+      out+=`      ]\n`;
+      out+=`    }${si<flRanges.length-1?',':''}\n`;
+    });
+    out+=`  ]\n}`;
+    return out;
+  }
+
+  function refreshSectorJson(){
+    const el=document.getElementById('sp-json-out');
+    if(el)el.value=buildSectorJsonText();
+  }
+  window.refreshSectorJson=refreshSectorJson;
+
+  function copySpJson(){
+    navigator.clipboard.writeText(buildSectorJsonText()).then(()=>{const el=document.getElementById('sp-json-copied');el.classList.add('show');setTimeout(()=>el.classList.remove('show'),2000);});
+  }
+  window.copySpJson=copySpJson;
+
+  function drawCopyJson(){
+    navigator.clipboard.writeText(buildSectorJsonText()).then(()=>{const el=document.getElementById('dbar-copied');el.classList.add('show');setTimeout(()=>el.classList.remove('show'),2000);});
+  }
+  window.drawCopyJson=drawCopyJson;
+
+  function saveSector(){
+    const id=document.getElementById('ns-id').value.trim();
+    if(!id){alert('ID is required');return;}
+    const comment=document.getElementById('ns-comment').value.trim();
+    const group=document.getElementById('ns-group').value;
+    const ownersRaw=document.getElementById('ns-owners').value.trim();
+    const owners=ownersRaw?ownersRaw.split(',').map(s=>s.trim()).filter(Boolean):[];
+    const color=document.getElementById('ns-color').value;
+    const sectors=flRanges.filter(r=>r.points.length>=3).map(r=>({min:r.min,max:r.max,points:r.points.map(p=>[latToDMS(p[0]),lngToDMS(p[1])])}));
+    sectorColorOverrides[id]=color;
+    flRanges.forEach(r=>clearFlRangeMapObjects(r));
+    const regionObj={id,comment,group,owner:owners,sectors};
+    if(files.length===0){
+      loadFiles([{json:{positions:{},airspace:[regionObj],airports:{}},name:`${id}.json`}]);
+    } else {
+      const fe=files[0];
+      if(!fe.data.airspace)fe.data.airspace=[];
+      fe.data.airspace.push(regionObj);
+      const parsedSectors=[];
+      for(const region of fe.data.airspace){
+        for(const sec of(region.sectors||[])){
+          const latlngs=[],secMin=sec.min??0,secMax=sec.max??999;
+          for(const p of(sec.points||[])){const lat=parseDMS(p[0]),lon=parseDMS(p[1]);if(!isNaN(lat)&&!isNaN(lon))latlngs.push([lat,lon]);}
+          if(latlngs.length>2)parsedSectors.push({region,sec,latlngs,secMin,secMax});
+        }
+      }
+      fe.parsedSectors=parsedSectors; renderSectors();
+    }
+    document.getElementById('empty-msg').style.display='none';
+    flRanges=[]; activeFlRangeId=null;
+    document.getElementById('sector-panel').classList.remove('open');
+  }
+  window.saveSector=saveSector;
+
+  // ── Colour pickers ───────────────────────────────────────────────────────
+  window.changePositionColor=function(fileId,pid,hex){
+    const fe=files.find(f=>f.id===fileId);if(!fe)return;
+    fe.posColors[pid]=hex;
+    if(fe.data.positions?.[pid]){if(!fe.data.positions[pid].colours)fe.data.positions[pid].colours=[{}];fe.data.positions[pid].colours[0].hex=hex;}
+    renderSidebar();renderSectors();
+  };
+  window.changeSectorColorFromPopup=function(regionId,hex){
+    if(!regionId)return;sectorColorOverrides[regionId]=hex;renderSectors();
+  };
+
+  // ══════════════════════════════════════════════════════════════════════════
+  // MAP INIT
+  // ══════════════════════════════════════════════════════════════════════════
+  function initMap(){
+    map=L.map('map',{center:[28,5],zoom:5,zoomControl:true});
+    L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png',{maxZoom:19,subdomains:'abcd',attribution:''}).addTo(map);
+    layerGroup=L.layerGroup().addTo(map);
+    map.createPane('nodePane');
+    map.getPane('nodePane').style.zIndex=2000;
+    map.getPane('nodePane').style.pointerEvents='auto';
+    nodeLayer=L.layerGroup({pane:'nodePane'}).addTo(map);
+    map.on('click',onMapClick);
+    map.on('contextmenu',onMapContextMenu);
+    map.on('mousemove',e=>{
+      const lat=e.latlng.lat.toFixed(4),lng=e.latlng.lng.toFixed(4);
+      document.getElementById('s-coord').textContent=`${lat>=0?lat+'°N':Math.abs(lat)+'°S'}  ${lng>=0?lng+'°E':Math.abs(lng)+'°W'}`;
+    });
+  }
+
+  // ══════════════════════════════════════════════════════════════════════════
+  // SECTOR RENDER
+  // ══════════════════════════════════════════════════════════════════════════
+  function getSectorColor(fe,region,owners){
+    if(region?.id&&sectorColorOverrides[region.id])return sectorColorOverrides[region.id];
+    for(const o of(owners||[])){if(fe.active.has(o)&&fe.posColors[o])return fe.posColors[o];}
+    return null;
+  }
+  function getSectorStyle(fe,region,owners,isHover){
+    const c=getSectorColor(fe,region,owners);
+    if(c)return{fillColor:c,color:c,fillOpacity:isHover?0.60:ACTIVE_FILL_OPACITY,weight:isHover?2.2:1.8,opacity:1.0};
+    return{fillColor:INACTIVE_STYLE.fill,color:INACTIVE_STYLE.stroke,fillOpacity:isHover?0.22:INACTIVE_STYLE.fillOpacity,weight:isHover?1.4:INACTIVE_STYLE.weight,opacity:isHover?0.75:INACTIVE_STYLE.opacity};
+  }
+  function badgeClass(g){const t=(g||'').toUpperCase();if(t==='CTR')return'badge-ctr';if(t==='APP'||t==='DEP')return'badge-app';if(t==='TWR')return'badge-twr';if(t==='GND')return'badge-gnd';if(t==='DEL')return'badge-del';if(t==='FSS')return'badge-fss';return'badge-ctr';}
+
+  function buildPopupContent(fe,region,sec,latlngs,uid){
+    const name=region.id||'Unknown',group=(region.group||'CTR').toUpperCase(),owners=region.owner||[];
+    const flMin=sec.min??0,flMax=sec.max??999;
+    const chips=owners.map((o,i)=>`<span class="owner-chip ${i===0?'primary':'secondary'}">${escHtml(o)}${fe.active.has(o)?' ✓':''}</span>`).join('');
+    const flMaxStr=flMax>=999?'UNL':`FL${String(flMax).padStart(3,'0')}`;
+    const col=getSectorColor(fe,region,owners)||'#5dade2';
+    return `<div class="popup-compact">
+      <div class="pc-name">${escHtml(name)}<span class="popup-group-badge ${badgeClass(group)}" style="margin-left:7px">${escHtml(group)}</span></div>
+      <div class="pc-row"><span class="pc-lbl">LOWER</span><span class="pc-val amber">FL${String(flMin).padStart(3,'0')}</span><span class="pc-sep">→</span><span class="pc-lbl">UPPER</span><span class="pc-val">${flMaxStr}</span></div>
+      <div class="pc-owners">${chips||'<span style="color:#2a4060">—</span>'}</div>
+      <div class="pc-actions">
+        <button class="pc-btn" onclick="window.startVertexEdit('${uid}')">✦ EDIT VERTICES</button>
+        <label class="pc-btn color-btn" style="cursor:pointer;position:relative;overflow:hidden;">◑ COLOUR<input type="color" value="${col}" style="opacity:0;position:absolute;inset:0;width:100%;height:100%;cursor:pointer;" onchange="window.changeSectorColorFromPopup('${escJs(region.id||'')}',this.value)"></label>
+      </div></div>`;
+  }
+
+  window._pendingEdits_data={};
+
+  function renderSectors(){
+    layerGroup.clearLayers();
+    let visible=0;
+    for(const fe of files){
+      for(const {region,sec,latlngs,secMin,secMax} of fe.parsedSectors){
+        if(FL<secMin||FL>secMax)continue;
+        const owners=region.owner||[],style=getSectorStyle(fe,region,owners,false);
+        const poly=L.polygon(latlngs.map(p=>L.latLng(p[0],p[1])),{...style,smoothFactor:1,interactive:true});
+        poly.on('mouseover',function(){this.setStyle(getSectorStyle(fe,region,owners,true));this.bringToFront();});
+        poly.on('mouseout',function(){this.setStyle(getSectorStyle(fe,region,owners,false));});
+        poly.on('click',ev=>{
+          if(activeFlRangeId)return;
+          L.DomEvent.stopPropagation(ev);
+          const uid='ed_'+Math.random().toString(36).slice(2);
+          window._pendingEdits_data[uid]={latlngs,polygon:poly,sectorName:region.id||'sector'};
+          L.popup({closeButton:true,autoPan:true,maxWidth:320}).setLatLng(ev.latlng).setContent(buildPopupContent(fe,region,sec,latlngs,uid)).openOn(map);
+        });
+        poly.addTo(layerGroup);visible++;
+      }
+      for(const[,apt]of Object.entries(fe.data.airports||{})){
+        if(!apt.coord)continue;
+        L.circleMarker(apt.coord,{radius:3,fillColor:'#f0b429',fillOpacity:0.8,color:'#a07820',weight:1,interactive:false}).addTo(layerGroup);
+      }
+    }
+    // Redraw any in-progress preview polys
+    flRanges.forEach(r=>{if(r.poly)r.poly.addTo(layerGroup);});
+    document.getElementById('s-vis').textContent=`VISIBLE: ${visible}`;
+  }
+
+  function parseFileData(json,name){
+    const id=++fileIdCounter,parsedSectors=[],active=new Set(),posColors={};
+    for(const[pid,pos]of Object.entries(json.positions||{}))posColors[pid]=pos.colours?.[0]?.hex||'#5080a8';
+    let bounds=null,globalMin=Infinity;
+    for(const region of(json.airspace||[])){
+      for(const sec of(region.sectors||[])){
+        const latlngs=[],secMin=sec.min??0,secMax=sec.max??999;
+        if(secMin<globalMin)globalMin=secMin;
+        for(const p of(sec.points||[])){const lat=parseDMS(p[0]),lon=parseDMS(p[1]);if(!isNaN(lat)&&!isNaN(lon)&&isFinite(lat)&&isFinite(lon)){latlngs.push([lat,lon]);if(!bounds)bounds=L.latLngBounds([lat,lon],[lat,lon]);else bounds.extend([lat,lon]);}}
+        if(latlngs.length>2)parsedSectors.push({region,sec,latlngs,secMin,secMax});
+      }
+    }
+    return{id,name,data:json,parsedSectors,active,posColors,collapsed:false,bounds,globalMin};
+  }
+
+  function loadFiles(jsonList){
+    let combinedBounds=null,globalMin=Infinity;
+    for(const{json,name}of jsonList){
+      const existing=files.findIndex(f=>f.name===name);if(existing!==-1)files.splice(existing,1);
+      const fd=parseFileData(json,name);files.push(fd);
+      if(fd.bounds){if(!combinedBounds)combinedBounds=fd.bounds;else combinedBounds.extend(fd.bounds);}
+      if(isFinite(fd.globalMin)&&fd.globalMin<globalMin)globalMin=fd.globalMin;
+    }
+    if(isFinite(globalMin)){const sl=document.getElementById('lvl-slider');sl.min=globalMin;if(FL<globalMin){FL=globalMin;sl.value=FL;setFL(FL);}}
+    if(combinedBounds)map.fitBounds(combinedBounds,{padding:[20,20]});
+    document.getElementById('empty-msg').style.display='none';
+    document.getElementById('s-pos').textContent=`POSITIONS: ${files.reduce((s,f)=>s+Object.keys(f.data.positions||{}).length,0)}`;
+    updateFname();renderSidebar();renderSectors();
+  }
+
+  function updateFname(){document.getElementById('fname').textContent=files.map(f=>f.name).join(', ')||'no file loaded';}
+  function removeFile(id){files=files.filter(f=>f.id!==id);if(!files.length)document.getElementById('empty-msg').style.display='';updateFname();renderSidebar();renderSectors();}
+  function toggleFileCollapse(id){const f=files.find(f=>f.id===id);if(f)f.collapsed=!f.collapsed;renderSidebar();}
+  function setFL(v){FL=v;const p=v.toString().padStart(3,'0');document.getElementById('lvl-val').innerText=p;document.getElementById('s-fl').innerHTML=`FL: ${p}`;renderSectors();}
+  function toggleAllPositions(){
+    const ta=files.reduce((s,f)=>s+f.active.size,0),tp=files.reduce((s,f)=>s+Object.keys(f.data.positions||{}).length,0),allOn=ta===tp&&tp>0;
+    for(const fe of files){if(allOn)fe.active.clear();else Object.keys(fe.data.positions||{}).forEach(pid=>fe.active.add(pid));}
+    renderSidebar();renderSectors();
+  }
+  function togglePanel(){panelOpen=!panelOpen;document.getElementById('panel').classList.toggle('open',panelOpen);document.getElementById('toggle-btn').classList.toggle('lit',panelOpen);document.getElementById('toggle-btn').textContent=panelOpen?'POSITIONS ◀':'POSITIONS ▶';}
+
+  function renderSidebar(){
+    const list=document.getElementById('pos-list');
+    document.getElementById('act-count').textContent=`${files.reduce((s,f)=>s+f.active.size,0)} active`;
+    if(!files.length){list.innerHTML='<div class="no-files-hint">Load a file to see positions</div>';return;}
+    let h='';
+    for(const fe of files){
+      const posCount=Object.keys(fe.data.positions||{}).length,hasActive=fe.active.size>0;
+      h+=`<div class="file-block${fe.collapsed?' collapsed':''}${hasActive?' has-active':''}"><div class="file-hdr" onclick="toggleFileCollapse(${fe.id})"><span class="file-chevron">▾</span><span class="file-title">${escHtml(fe.name)}</span><span class="file-active-badge">${fe.active.size}▲</span><span class="file-badge">${posCount}</span><span class="file-remove" onclick="event.stopPropagation();removeFile(${fe.id})">✕</span></div><div class="file-body">`;
+      const byType={};
+      for(const[pid,pos]of Object.entries(fe.data.positions||{})){const t=pos.type||'OTHER';if(!byType[t])byType[t]=[];byType[t].push([pid,pos]);}
+      const order=['CTR','APP','DEP','TWR','GND','DEL'];
+      const types=order.filter(t=>byType[t]).concat(Object.keys(byType).filter(t=>!order.includes(t)));
+      for(const type of types){
+        h+=`<div class="grp">${type}</div>`;
+        for(const[pid,pos]of byType[type]){
+          const col=fe.posColors[pid]||'#5080a8',on=fe.active.has(pid);
+          h+=`<div class="prow${on?' on':''}" onclick="tog(${fe.id},'${escJs(pid)}')"><div class="prow-color-wrap"><div class="pdot" style="${on?`background:${col};border:1px solid ${col}`:'background:#0a1428;border:1px solid #1a3050'}"></div><input type="color" class="prow-color-input" value="${col}" onclick="event.stopPropagation()" onchange="event.stopPropagation();changePositionColor(${fe.id},'${escJs(pid)}',this.value)"></div><div class="pname"><div class="pid">${escHtml(pid)}</div><div class="pcall">${escHtml(pos.callsign||'')}${pos.frequency?' · '+pos.frequency:''}</div></div><span class="ptog">${on?'●':'○'}</span></div>`;
+        }
+      }
+      h+=`</div></div>`;
+    }
+    list.innerHTML=h;
+  }
+
+  function tog(fileId,pid){const fe=files.find(f=>f.id===fileId);if(!fe)return;if(fe.active.has(pid))fe.active.delete(pid);else fe.active.add(pid);renderSidebar();renderSectors();}
+  function escHtml(s){return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');}
+  function escJs(s){return String(s).replace(/\\/g,'\\\\').replace(/'/g,"\\'");}
+
+  document.getElementById('fi').addEventListener('change',e=>{
+    const flist=Array.from(e.target.files);if(!flist.length)return;
+    const results=[];let loaded=0;
+    for(const f of flist){const r=new FileReader();r.onload=ev=>{try{results.push({json:JSON.parse(ev.target.result),name:f.name});}catch(err){alert(`Error ${f.name}: ${err}`);}loaded++;if(loaded===flist.length&&results.length)loadFiles(results);};r.readAsText(f);}
+    e.target.value='';
+  });
+  document.getElementById('lvl-slider').addEventListener('input',function(){setFL(parseInt(this.value));});
+
+  initMap();
+  window.toggleFileCollapse=toggleFileCollapse;
+  window.removeFile=removeFile;
+  window.tog=tog;
+</script>
+</body>
+</html>
